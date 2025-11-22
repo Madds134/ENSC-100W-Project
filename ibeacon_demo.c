@@ -21,6 +21,11 @@
 #include "freertos/FreeRTOS.h"
 #include "stepper/stepper.h"
 
+#include "i2c/i2c_bus.h"
+#include "vl53l0x/vl53l0x.h"
+
+#include "wifi/wifi.h"   // or just "wifi.h" depending on path
+
 static const char *DEMO_TAG = "SCHRODINGER_SYSTEMS";
 extern esp_ble_ibeacon_vendor_t vendor_config;
 
@@ -254,63 +259,208 @@ static stepper_t motor;
 // Combined entry point of iBeacon receiver and stepper motor control, but
 // motor only spins once CW and once CCW, when iBeacon is detected within range
 
+// void app_main(void)
+// {
+//     // Initialize NVS flash for Bluetooth
+//     ESP_ERROR_CHECK(nvs_flash_init());
+//     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
+
+//     // Initialize Bluetooth controller
+//     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+//     ESP_ERROR_CHECK(esp_bt_controller_init(&bt_cfg));
+//     ESP_ERROR_CHECK(esp_bt_controller_enable(ESP_BT_MODE_BLE));
+
+//     // Initialize iBeacon functionality 
+//     ble_ibeacon_init();
+// #if (IBEACON_MODE == IBEACON_RECEIVER)
+//     esp_ble_gap_set_scan_params(&ble_scan_params);
+// #elif (IBEACON_MODE == IBEACON_SENDER)
+//     esp_ble_ibeacon_t adv_data;
+//     esp_err_t st = esp_ble_config_ibeacon_data(&vendor_config, &adv_data);
+//     if (st == ESP_OK)
+//         esp_ble_gap_config_adv_data_raw((uint8_t *)&adv_data, sizeof(adv_data));
+//     else
+//         ESP_LOGE(DEMO_TAG, "Config iBeacon data failed: %s", esp_err_to_name(st));
+// #endif
+
+//     // Initialize stepper motor
+//     stepper_init(&motor, GPIO_NUM_4, GPIO_NUM_5, GPIO_NUM_6, GPIO_NUM_7);
+//     stepper_set_rpm(&motor, 120.0f);  // alias to stepper_set_speed_rpm
+
+//     // Main loop for stepper motor control triggered by iBeacon detection
+//     while (1){ 
+//         ble_ibeacon_appRegister();
+//         if (beacon_nearby == true) { // beacon_nearby flag from esp_gap_cb
+//             ESP_LOGI(DEMO_TAG, "Opening Window: CW 3 revolution");
+
+//             for (int i = 0; i < 3 ; i++) { // Rotate 3 times clockwise to open
+//                 stepper_one_rev_cw(&motor);
+//             }
+//             while (beacon_nearby == true) {
+//                 // STOP ROTATION, DO NOTHING WHILE BEACON IS STILL WITHIN RANGE
+//                 ESP_LOGI(DEMO_TAG, "Beacon still nearby - motor idle");
+//                 vTaskDelay(2000 / portTICK_PERIOD_MS); // Wait for 2 seconds
+//                 ble_ibeacon_appRegister();
+//                 if(beacon_nearby == false) break; // exit for loop
+//             }
+//             if (beacon_nearby == false) {
+//                 // wait 2 seconds, rotate counter clockwise to close
+//                 vTaskDelay(2000 / portTICK_PERIOD_MS); // Wait for 2 seconds
+//                 ESP_LOGI(DEMO_TAG, "Beacon out of range - Closing Window: CCW 3 revolution");
+//                 for (int i = 0; i < 3 ; i++) {
+//                     stepper_one_rev_ccw(&motor);
+//                 }
+//             }
+//         }
+//         // If BLE Beacon is not detected
+//         else {
+//             ESP_LOGI(DEMO_TAG, "No beacon detected within range - motor idle");            
+//             vTaskDelay(1000 / portTICK_PERIOD_MS); // Wait for 1 second
+//         }        
+//     }
+// }
+
+// static const char *TAG = "MotionSensor";
+// void app_main(void)
+// {
+//     ESP_LOGI(TAG, "Starting VL53L0X + I2C test...");
+
+//     // 1) Initialize I2C bus (your i2c folder)
+//     ESP_ERROR_CHECK(i2c_bus_init());
+//     ESP_LOGI(TAG, "I2C bus initialized");
+
+//     // 2) Initialize VL53L0X (your vl53l0x folder)
+//     ESP_ERROR_CHECK(vl53_init());
+//     ESP_LOGI(TAG, "VL53L0X initialized");
+
+//     uint16_t dist_mm = 0;
+
+//     // 3) Main read loop
+//     while (1) {
+//         esp_err_t err = vl53_read_mm(&dist_mm);
+//         if (err == ESP_OK) {
+//             ESP_LOGI(TAG, "Distance: %u mm", dist_mm);
+//         } else {
+//             ESP_LOGE(TAG, "vl53_read_mm failed: %s", esp_err_to_name(err));
+//         }
+
+//         vTaskDelay(pdMS_TO_TICKS(50));  // ~20 Hz
+//     }
+// }
+
+
+// Combined entry point of iBeacon receiver and stepper motor control, and motion sensor control, but
+// motor only spins once CW and once CCW, when iBeacon is detected within range. Motion sensor only logs distance when window is open.
+
+// void app_main(void)
+// {
+//     // Initialize NVS flash for Bluetooth
+//     ESP_ERROR_CHECK(nvs_flash_init());
+//     ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
+
+//     // Initialize Bluetooth controller
+//     esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
+//     ESP_ERROR_CHECK(esp_bt_controller_init(&bt_cfg));
+//     ESP_ERROR_CHECK(esp_bt_controller_enable(ESP_BT_MODE_BLE));
+
+//     // Initialize iBeacon functionality 
+//     ble_ibeacon_init();
+// #if (IBEACON_MODE == IBEACON_RECEIVER)
+//     esp_ble_gap_set_scan_params(&ble_scan_params);
+// #elif (IBEACON_MODE == IBEACON_SENDER)
+//     esp_ble_ibeacon_t adv_data;
+//     esp_err_t st = esp_ble_config_ibeacon_data(&vendor_config, &adv_data);
+//     if (st == ESP_OK)
+//         esp_ble_gap_config_adv_data_raw((uint8_t *)&adv_data, sizeof(adv_data));
+//     else
+//         ESP_LOGE(DEMO_TAG, "Config iBeacon data failed: %s", esp_err_to_name(st));
+// #endif
+
+//     // Initialize stepper motor
+//     stepper_init(&motor, GPIO_NUM_4, GPIO_NUM_5, GPIO_NUM_6, GPIO_NUM_7);
+//     stepper_set_rpm(&motor, 120.0f);  // alias to stepper_set_speed_rpm
+
+//     // 1) Initialize I2C bus (i2c folder)
+//     ESP_ERROR_CHECK(i2c_bus_init());
+//     ESP_LOGI(DEMO_TAG, "I2C bus initialized");
+
+//     // 2) Initialize VL53L0X (vl53l0x folder)
+//     ESP_ERROR_CHECK(vl53_init());
+//     ESP_LOGI(DEMO_TAG, "VL53L0X initialized");
+
+//    uint16_t dist_mm = 0;
+//    cat_led_init();
+
+     
+
+//     // Main loop for stepper motor control triggered by iBeacon detection
+//     while (1){ 
+//         ble_ibeacon_appRegister(); 
+//         if (beacon_nearby == true) { // beacon_nearby flag from esp_gap_cb
+//             ESP_LOGI(DEMO_TAG, "Opening Window: CW 3 revolution");
+//             vTaskDelay(pdMS_TO_TICKS(50));
+//             for (int i = 0; i < 3 ; i++) { // Rotate 3 times clockwise to open
+//                 stepper_one_rev_cw(&motor);
+//             }
+//             while (beacon_nearby == true) {
+//                 // STOP ROTATION, DO NOTHING WHILE BEACON IS STILL WITHIN RANGE
+//                 ESP_LOGI(DEMO_TAG, "Beacon still nearby - motor idle"); 
+//                 cat_sensor_step(); // while doing nothing, check distance from motion sensor
+//                 ESP_LOGI(DEMO_TAG, "Senor read");
+//                 vTaskDelay(100/ portTICK_PERIOD_MS); // Wait for 2 seconds
+//                 cat_sensor_step();
+//                 ble_ibeacon_appRegister();
+//                 if(beacon_nearby == false) break; // exit for loop
+//             }
+//             if (beacon_nearby == false) {
+//                 // wait 2 seconds, rotate counter clockwise to close
+//                 vTaskDelay(2000 / portTICK_PERIOD_MS); // Wait for 2 seconds
+//                 ESP_LOGI(DEMO_TAG, "Beacon out of range - Closing Window: CCW 3 revolution");
+//                 for (int i = 0; i < 3 ; i++) {
+//                     stepper_one_rev_ccw(&motor);
+//                 }
+//                 for(int i = 0; i < 3; i++)
+//                 {
+//                 blink_led();
+//                 }
+//             }
+//         }
+//         // If BLE Beacon is not detected
+//         else {
+//             ESP_LOGI(DEMO_TAG, "No beacon detected within range - motor idle");            
+//             vTaskDelay(1000 / portTICK_PERIOD_MS); // Wait for 1 second
+//         }        
+//     }
+// }
+
+
+
 void app_main(void)
 {
-    // Initialize NVS flash for Bluetooth
+    // Init NVS (required by Wi-Fi)
     ESP_ERROR_CHECK(nvs_flash_init());
-    ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
 
-    // Initialize Bluetooth controller
-    esp_bt_controller_config_t bt_cfg = BT_CONTROLLER_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_bt_controller_init(&bt_cfg));
-    ESP_ERROR_CHECK(esp_bt_controller_enable(ESP_BT_MODE_BLE));
+    // For now, skip BT memory release while testing Wi-Fi alone
+    // ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
 
-    // Initialize iBeacon functionality 
-    ble_ibeacon_init();
-#if (IBEACON_MODE == IBEACON_RECEIVER)
-    esp_ble_gap_set_scan_params(&ble_scan_params);
-#elif (IBEACON_MODE == IBEACON_SENDER)
-    esp_ble_ibeacon_t adv_data;
-    esp_err_t st = esp_ble_config_ibeacon_data(&vendor_config, &adv_data);
-    if (st == ESP_OK)
-        esp_ble_gap_config_adv_data_raw((uint8_t *)&adv_data, sizeof(adv_data));
-    else
-        ESP_LOGE(DEMO_TAG, "Config iBeacon data failed: %s", esp_err_to_name(st));
-#endif
+    // 1) Start Wi-Fi STA to your iPhone hotspot
+    wifi_init_sta("Madden's iPhone", "maddennn");
 
-    // Initialize stepper motor
-    stepper_init(&motor, GPIO_NUM_4, GPIO_NUM_5, GPIO_NUM_6, GPIO_NUM_7);
-    stepper_set_rpm(&motor, 120.0f);  // alias to stepper_set_speed_rpm
+    // 2) Periodically check connection status
+    char ip[16];
+    char ssid[33];
 
-    // Main loop for stepper motor control triggered by iBeacon detection
-    while (1){ 
-        ble_ibeacon_appRegister();
-        if (beacon_nearby == true) { // beacon_nearby flag from esp_gap_cb
-            ESP_LOGI(DEMO_TAG, "Opening Window: CW 3 revolution");
-
-            for (int i = 0; i < 3 ; i++) { // Rotate 3 times clockwise to open
-                stepper_one_rev_cw(&motor);
+    while (1) {
+        if (wifi_is_connected()) {
+            if (wifi_get_ip_str(ip, sizeof(ip)) == ESP_OK &&
+                wifi_get_ssid(ssid, sizeof(ssid)) == ESP_OK) {
+                ESP_LOGI("APP", "Connected to SSID '%s' with IP %s", ssid, ip);
             }
-            while (beacon_nearby == true) {
-                // STOP ROTATION, DO NOTHING WHILE BEACON IS STILL WITHIN RANGE
-                ESP_LOGI(DEMO_TAG, "Beacon still nearby - motor idle");
-                vTaskDelay(2000 / portTICK_PERIOD_MS); // Wait for 2 seconds
-                ble_ibeacon_appRegister();
-                if(beacon_nearby == false) break; // exit for loop
-            }
-            if (beacon_nearby == false) {
-                // wait 2 seconds, rotate counter clockwise to close
-                vTaskDelay(2000 / portTICK_PERIOD_MS); // Wait for 2 seconds
-                ESP_LOGI(DEMO_TAG, "Beacon out of range - Closing Window: CCW 3 revolution");
-                for (int i = 0; i < 3 ; i++) {
-                    stepper_one_rev_ccw(&motor);
-                }
-            }
+        } else {
+            ESP_LOGI("APP", "WiFi not connected yet...");
         }
-        // If BLE Beacon is not detected
-        else {
-            ESP_LOGI(DEMO_TAG, "No beacon detected within range - motor idle");            
-            vTaskDelay(1000 / portTICK_PERIOD_MS); // Wait for 1 second
-        }        
+
+        // Important: yield so watchdog doesn’t fire
+        vTaskDelay(pdMS_TO_TICKS(1000));   // 1 second
     }
 }
