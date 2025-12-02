@@ -96,3 +96,20 @@ void stepper_one_rev_ccw(stepper_t *s)
     for (int i = 0; i < 200; ++i) stepper_step_once(s, -1);
     stepper_release(s);
 }
+
+void stepper_rotate_deg(stepper_t *s, int degree)
+{
+    if(!s->initialized) return;
+
+    int dir = (degree >= 0) ? +1 : -1;
+    int abs_deg = (degree >= 0) ? degree : -degree;
+
+    // Convert degrees to steps
+    int steps = abs_deg * 200 / 360;
+    
+    for(int i = 0; i < steps; ++i)
+    {
+        stepper_step_once(s, dir);
+    }
+    stepper_release(s);
+}

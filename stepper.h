@@ -29,5 +29,6 @@ void stepper_one_rev_cw(stepper_t *s);
 void stepper_one_rev_ccw(stepper_t *s);
 void stepper_release(stepper_t *s);
 void stepper_step_once(stepper_t *s, int dir);
+void stepper_rotate_deg(stepper_t *s, int deg);
 
 #endif // STEPPER_H
